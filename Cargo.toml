@@ -1,0 +1,44 @@
+[package]
+name = "ts4"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Zen 4-only 4D trace semiring library for AMD Ryzen 9 7950X-class x86_64 targets."
+readme = "README.md"
+documentation = "https://docs.rs/ts4"
+license = "UNLICENSED"
+keywords = ["zen4", "avx512vl", "trace", "semiring", "amd64"]
+categories = ["algorithms", "mathematics"]
+include = [
+    "Cargo.toml",
+    "README.md",
+    "RELEASE.md",
+    "SPEC_MAP.md",
+    "src/**",
+    "docs/4d_sections_clean.txt",
+    "docs/README.md",
+    "docs/USAGE.md",
+    "docs/TUTORIAL.md",
+    "docs/FORMULAS.md",
+    "docs/zen4_registers.md",
+    "docs/57647_zen4_sog.txt",
+    "docs/RS_DOC.md",
+]
+
+# Zen 4-only crate. Rust nightly, edition 2024, unsafe-oriented kernels. Build and bench with `-C target-cpu=znver4`.
+
+[lib]
+name = "ts4"
+path = "src/lib.rs"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "criterion"
+harness = false

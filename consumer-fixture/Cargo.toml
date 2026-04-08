@@ -1,0 +1,8 @@
+[package]
+name = "ts4-consumer-fixture"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+ts4 = { path = ".." }

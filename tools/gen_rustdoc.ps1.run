@@ -1,0 +1,2 @@
+# Generate RS_DOC.md from spec
+powershell -ExecutionPolicy Bypass -File .\tools\gen_rustdoc.ps1

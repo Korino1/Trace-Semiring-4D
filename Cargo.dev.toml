@@ -1,0 +1,7 @@
+# Zen 4-only development manifest. Keep local and release builds on the same target policy.
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "criterion"
+harness = false
