@@ -1,83 +1,247 @@
-# TS4 (4D Trace Semiring) — Zen 4-only Rust library
+# TS4
 
-## Policy
-This crate targets AMD Zen 4 / Ryzen 9 7950X class CPUs only. It is maintained as a Rust nightly, edition 2024, unsafe-oriented codebase. Fallback and scalar-only modes are intentionally unsupported.
-The repository checkout is expected to run under the pinned nightly recorded in `rust-toolchain.toml` and the `znver4` codegen contract.
-The supported downstream surface is the root reexports and `ts4::prelude::*`; module-path imports such as `ts4::trace::Trace` are intentionally out of contract, and implementation modules remain private.
-Representation fields of `TS4`/`TS4Mod` (`terms`, `modulus`) are not part of the downstream contract. Use accessor methods such as `term_count`, `coeff_sum`, `get_coeff`, `iter`, and `modulus()` instead of direct field access.
-`Trace` is also accessor-based: use methods such as `tau`, `as_blocks`, `into_blocks`, `mass_l1`, `blocks_l1_gt_mask`, and `pi` instead of depending on storage layout or slice-only helper entrypoints. Free functions such as `sum_l1_blocks`, `blocks_l1_gt`, and `blocks_l1_gt_mask` remain as compatibility helpers for raw `&[Block]` inputs, but the checked-in downstream contract prefers the `Trace` methods. For the first-class physical class layer from sections `20–22`, use `SyncTrace` plus `is_kappa_admissible` / `is_tight_core` and its `boxplus` / `boxplus_tight` / `sequential` / `time_refine` / successor methods. Sections `31–37` are now also exposed through the first-class theory layer: `normalize_trace`, `normalize_ts4`, `traces_equal_by_normal_form`, `ts4_equal_by_normal_form`, `ts4_semiring_laws_hold`, `ts4_noncommutative_example`, `trace_left_cancellation_holds`, `is_trace_atom`, `monomial_left_divides`, `left_divide_trace_is_exact`, `pi_trace_compose_morphism_holds`, and `proj_r4_matches_scaled_pi`.
+`ts4` — это Rust-библиотека для работы с 4D trace semiring.
 
-The release-grade package contract is intentionally narrower than the implementation surface. Current consumer-facing verification is anchored by `consumer-fixture/`, `cargo test --quiet`, `cargo test --release --quiet`, `cargo test --doc --quiet`, `cargo doc --no-deps`, and `cargo package --list` on the checked-in tree.
+Главная идея библиотеки такая:
 
-## Specification
-- `docs/4d_sections_clean.txt` — synchronized 4D specification (sections 0-37).
+**TS4 позволяет представить сложные объекты и процессы как 4D-трассы, чтобы выявлять структурные закономерности между ними, если такие закономерности действительно существуют в 4D-модели.**
 
-## Requirements
-- Rust nightly (pinned via `rust-toolchain.toml`), edition 2024, with `rust-version = "1.85"` metadata floor
-- Windows (MSVC toolchain)
-- AMD Zen 4 / `znver4`
+Практический смысл в том, что библиотека помогает вынести тяжёлые вычисления в более строгий уровень абстракции. Вместо работы только с сырыми низкоуровневыми вычислениями можно работать через:
+- композицию трасс,
+- нормализацию,
+- делимость,
+- проекции,
+- физическую допустимость,
+- алгебраические законы и инварианты.
 
-## Build (Windows)
-Run these commands from the repository root.
-```powershell
-cargo build --release
-```
-The build contract is supplied by `.cargo/config.toml`, which pins `x86_64-pc-windows-msvc` and `-C target-cpu=znver4`.
+TS4 не "угадывает" закономерности сам по себе. Он даёт формальную систему, в которой скрытые связи, повторяемые формы и инварианты можно выразить, проверить и вычислить.
 
-## Zen 4 build policy
-Use the repository's pinned nightly and the `znver4` target contract for release, check, and CI runs. The currently code-proven hot path is Zen 4-oriented through `AVX-512VL` mask semantics and a 256-bit datapath; the broader Zen 4 ISA envelope (`AVX-512F`, `FMA3`, `BMI2`, `GFNI`, `LZCNT`, `POPCNT`) is reserved by contract and should only be claimed in hot kernels when the implementation and benchmarks explicitly prove it.
-On Ryzen 9 7950X, benchmark policy should account for the two CCDs, separate L3 domains, and locality-sensitive placement when interpreting results.
+## Что это такое
 
-## Docs and tooling
-- `tools\gen_rustdoc.ps1` generates `docs/RS_DOC.md` from the checked-in spec snapshot and accepts explicit `-SpecPath` / `-OutPath` overrides.
-- `tools\sync_docs.ps1` refreshes `docs/4d_sections_clean.txt` from an explicit upstream source path; pass `-SourcePath` instead of relying on a local drive layout.
-- `tools\run_topology_waves.ps1` is the operator-triggered helper for same-CCD and cross-CCD pinned waves; it keeps `baseline-smt-off` authoritative, resolves affinity from the host NUMA/CCD layout, and writes run-scoped artifacts under `target/bench-policy/runs/<wave>/<affinity-class>/<run-id>/`.
-- Topology-wave manifests such as `target/bench-policy/topology-real-manifest.json` include `run.json`, `fingerprint.json`, `topology.json`, `machine.json`, bench logs/results, and optional Windows OS perf-counter snapshots for each run.
-- `cargo package --list` should only expose the curated release surface declared in `Cargo.toml`.
-  Cargo still emits `Cargo.lock` and `Cargo.toml.orig`, so the package list is not a pure manifest mirror.
+На базовом уровне библиотека даёт:
+- `Block` — один пространственный шаг `(x, y, z)`
+- `Trace` — последовательность блоков, разделённых временными шагами `τ`
+- `TS4` — формальную сумму трасс с целыми коэффициентами
+- `κ`-операции: `phi_kappa`, `parallel_kappa`, `odot_kappa`, `otimes_kappa`
+- physical layer и theory layer для нормализации, законов, делимости, морфизмов и связанных проверок
 
-Verified manifest facts currently exposed by `Cargo.toml` are the crate name, version, edition, `rust-version`, description, README, docs.rs link, license, keywords, categories, curated `include` set, and release-profile settings. No repository/homepage field is claimed in this checkout.
+Эта библиотека нужна не для "общей алгебры вообще", а именно для работы с моделью TS4 как с самостоятельным формальным аппаратом.
 
-## Runnable consumer fixture
-- `consumer-fixture/` is a real downstream crate in this checkout. It depends on `ts4` by path and keeps `publish = false`.
-- Run the fixture from the repository root with `cargo run --manifest-path consumer-fixture/Cargo.toml`.
-- Verify the exact downstream contract with `cargo test --manifest-path consumer-fixture/Cargo.toml --quiet`.
-- The runnable entrypoint is `consumer-fixture/src/main.rs`; the exact-output assertions live in `consumer-fixture/tests/smoke.rs`.
+## Для чего библиотека полезна
 
-## Usage
+Если в твоей задаче есть 4D-структура, библиотека позволяет:
+- представлять объекты как трассы и суммы трасс;
+- композиционно собирать сложные процессы;
+- искать инварианты и повторяемые формы;
+- сравнивать объекты не только по числам, но и по структуре;
+- выносить тяжёлые вычисления в более компактную алгебраическую форму;
+- проверять, существуют ли между объектами закономерности, морфизмы или отношения делимости.
+
+Именно это и есть основной смысл `TS4`: не заменить предметную модель, а дать строгий язык, в котором её структура становится вычислимой.
+
+## Быстрый пример
+
 ```rust
 use ts4::prelude::*;
 
-let a = Trace::new(vec![Block::new(1,0,0), Block::zero()]); // x τ
-let b = Trace::new(vec![Block::new(0,1,0)]);                // y
-let c = a.compose(&b);                                      // x τ y
+let left = Trace::new(vec![Block::new(1, 0, 0), Block::zero()]); // x τ
+let right = Trace::new(vec![Block::new(0, 1, 0)]);               // y
 
-let ta = TS4::from_trace(a, 3);
-let tb = TS4::from_trace(b, 2);
-let tc = ta.compose(&tb); // 6 * (x τ y)
+let composed = left.compose(&right); // x τ y
+let mass = composed.mass_l1();
+let mask = composed.blocks_l1_gt_mask(0);
+let pi = composed.pi();
+
+let a = TS4::from_trace(left, 2);
+let b = TS4::from_trace(right, 3);
+let c = a.compose(&b); // 6 * (x τ y)
+
+assert_eq!(mass, 2);
+assert_eq!(mask.get(0), true);
+assert_eq!(pi, (2, 1, 1, 0));
+assert_eq!(c.term_count(), 1);
+assert_eq!(c.coeff_sum(), 6);
 ```
 
-## Checks
+## Основные типы
+
+### `Block`
+
+`Block` — один 3D-шаг.
+
+Основные методы:
+- `Block::new(x, y, z)`
+- `Block::zero()`
+- `l1()`
+- `add()`
+- `sub()`
+- аксессоры `x()`, `y()`, `z()`
+
+### `Trace`
+
+`Trace` — базовый time-aware объект библиотеки. Он представляет последовательность блоков, где нулевые блоки играют роль временных шагов `τ`.
+
+Основные методы:
+- `Trace::new(...)`
+- `Trace::empty()`
+- `Trace::tau(n)`
+- `Trace::from_word(...)`
+- `compose(...)`
+- `mass_l1()`
+- `blocks_l1_gt_mask(kappa)`
+- `pi()`
+- `as_blocks()`
+- `into_blocks()`
+
+### `TS4`
+
+`TS4` — формальная сумма трасс с целыми коэффициентами.
+
+Основные методы:
+- `TS4::zero()`
+- `TS4::one()`
+- `TS4::from_trace(...)`
+- `add(...)`
+- `compose(...)`
+- `normalize()`
+- `term_count()`
+- `coeff_sum()`
+- `get_coeff(...)`
+- `iter()`
+
+### Physical Layer
+
+Разделы концепта `20–22` представлены через:
+- `SyncTrace`
+- `is_kappa_admissible`
+- `is_tight_core`
+- `boxplus`
+- `boxplus_tight`
+- `sequential`
+- `time_refine`
+- `successor_t`, `successor_x`, `successor_y`, `successor_z`
+
+### Theory Layer
+
+Разделы концепта `31–37` представлены через:
+- `normalize_trace`
+- `normalize_ts4`
+- `traces_equal_by_normal_form`
+- `ts4_equal_by_normal_form`
+- `ts4_semiring_laws_hold`
+- `ts4_noncommutative_example`
+- `trace_left_cancellation_holds`
+- `is_trace_atom`
+- `monomial_left_divides`
+- `left_divide_trace_is_exact`
+- `pi_trace_compose_morphism_holds`
+- `proj_r4_matches_scaled_pi`
+
+## Публичный контракт
+
+Downstream-код должен использовать:
+- root reexports, или
+- `use ts4::prelude::*;`
+
+Не стоит завязываться на private module paths вроде `ts4::trace::Trace`.
+
+Также не стоит завязываться на внутреннее представление:
+- `Trace` надо воспринимать как accessor-based тип, а не как конкретный storage layout
+- `TS4.terms` не входит в поддерживаемый контракт
+- `TS4Mod.terms` и прямой доступ к `TS4Mod.modulus` не входят в поддерживаемый контракт
+
+Используй публичные методы:
+- `Trace::tau`, `mass_l1`, `blocks_l1_gt_mask`, `pi`
+- `TS4::term_count`, `coeff_sum`, `get_coeff`, `iter`
+- `TS4Mod::modulus()`
+
+## Требования к платформе и сборке
+
+Это намеренно **не** переносимая "общая" Rust-библиотека.
+
+Текущий контракт такой:
+- Rust nightly, зафиксированный в [rust-toolchain.toml](rust-toolchain.toml)
+- edition 2024
+- Windows MSVC
+- AMD Zen 4 / `znver4`
+- Zen 4-only policy: без scalar fallback и без runtime dispatch surface
+
+Checked-in hot path ориентирован на packed implementation под Zen 4 с `AVX-512VL` mask semantics и 256-bit datapath.
+
+Сборка из корня репозитория:
+
+```powershell
+cargo build --release
+```
+
+Файл `.cargo/config.toml` задаёт checked-in `znver4` target contract.
+
+## Текущее состояние
+
+Этот checkout содержит реализованный концепт TS4 и его checked-in Zen 4-only библиотечную поверхность.
+
+Текущий локально подтверждённый статус:
+- `cargo test --quiet`: `171/171` unit tests, `109/109` doctests
+- `cargo test --release --quiet`: passed
+- `cargo doc --no-deps`: passed
+- `cargo package --list`: passed
+
+Единственный metadata-хвост в этом checkout — незаполненные `repository` / `homepage`, потому что здесь нет подтверждённого публичного URL.
+
+## С чего начать
+
+Если пользователь видит проект впервые, порядок такой:
+
+1. Этот `README`
+2. [docs/USAGE.md](docs/USAGE.md)
+3. [consumer-fixture/](consumer-fixture/)
+4. [docs/4d_sections_clean.txt](docs/4d_sections_clean.txt), если нужен полный текст концепта
+
+Реальный downstream-пример лежит здесь:
+- [consumer-fixture/src/main.rs](consumer-fixture/src/main.rs)
+- [consumer-fixture/tests/smoke.rs](consumer-fixture/tests/smoke.rs)
+
+Запуск:
+
+```powershell
+cargo run --manifest-path consumer-fixture/Cargo.toml
+cargo test --manifest-path consumer-fixture/Cargo.toml --quiet
+```
+
+## Полезные команды
+
+Проверки:
+
 ```powershell
 .\tools\check.ps1
 ```
 
-## Release build
-```powershell
-.\tools\build_release.ps1
-```
+Локальный CI:
 
-## rustdoc
-```powershell
-.\tools\gen_rustdoc.ps1
-```
-
-## Local CI
 ```powershell
 .\tools\ci.ps1
 ```
 
-## Criterion bench
+Релизная сборка:
+
+```powershell
+.\tools\build_release.ps1
+```
+
+Синхронизация rustdoc:
+
+```powershell
+.\tools\gen_rustdoc.ps1
+```
+
+Criterion:
+
 ```powershell
 cargo bench --bench criterion
+```
+
+Topology / CCD-aware прогоны:
+
+```powershell
+.\tools\run_topology_waves.ps1
 ```
