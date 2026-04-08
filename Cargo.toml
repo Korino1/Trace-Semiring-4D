@@ -6,12 +6,16 @@ rust-version = "1.85"
 description = "Zen 4-only 4D trace semiring library for AMD Ryzen 9 7950X-class x86_64 targets."
 readme = "README.md"
 documentation = "https://docs.rs/ts4"
-license = "UNLICENSED"
+homepage = "https://github.com/Korino1/Trace-Semiring-4D"
+repository = "https://github.com/Korino1/Trace-Semiring-4D"
+license = "MIT OR Apache-2.0"
 keywords = ["zen4", "avx512vl", "trace", "semiring", "amd64"]
 categories = ["algorithms", "mathematics"]
 include = [
     "Cargo.toml",
     "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
     "RELEASE.md",
     "SPEC_MAP.md",
     "src/**",
